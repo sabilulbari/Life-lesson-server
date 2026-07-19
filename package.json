@@ -1,0 +1,21 @@
+{
+  "name": "life-lessons-server",
+  "version": "1.0.0",
+  "description": "Server for Life Lessons platform",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "mongoose": "^8.4.1",
+    "morgan": "^1.10.0",
+    "stripe": "^15.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.3"
+  }
+}
