@@ -10,12 +10,15 @@ const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri);
 
 app.use(cors());
+app.use(express.json());
 
 const run = async () => {
   try {
     await client.connect();
     const database = client.db("Life_lession");
     const allLessonCollections = database.collection("lessons");
+    const reportCollection = database.collection("report");
+    const commentCollection = database.collection('comments')
 
     app.get("/", async (req, res) => {
       res.send("Hello, database is working");
@@ -50,7 +53,6 @@ const run = async () => {
 
         res.send(result);
       } catch (error) {
-        console.error("Error fetching filtered lessons:", error);
         res.status(500).send({ message: "Internal Server Error", error: error.message });
       }
     });
@@ -58,7 +60,6 @@ const run = async () => {
     app.get("/api/all/public/lessons/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        console.log(id);
         const query = { _id: id };
         const result = await allLessonCollections.findOne(query);
         if (!result) {
@@ -66,12 +67,60 @@ const run = async () => {
         }
         res.send(result);
       } catch (error) {
-        console.error("Error fetching single lesson:", error);
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
 
-    
+    app.post("/api/reports", async (req, res) => {
+      try {
+        // ১. ফ্রন্টএন্ডের বডি থেকে রিপোর্টের ডেটা রিসিভ করা
+        const { lessonId, lessonTitle, reason } = req.body;
+
+        console.log("All requested data");
+
+        // ২. ফ্রন্টএন্ড হেডার (authHeaders) থেকে রিপোর্টার (Reporter) এর তথ্য রিসিভ করা
+        const userId = req.headers["x-user-id"];
+        const userEmail = req.headers["x-user-email"];
+        const userName = req.headers["x-user-name"];
+
+        // অথেনটিকেশন চেক
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized! Please log in first." });
+        }
+
+        // ভ্যালিডেশন চেক (যদি ইউজার কোনো ফিল্ড ফাঁকা রেখে সাবমিট করে)
+        if (!lessonId || !lessonTitle || !reason) {
+          return res.status(400).send({ error: "All fields (lessonId, lessonTitle, reason) are required." });
+        }
+
+        // ৩. নতুন রিপোর্টের জন্য অবজেক্ট তৈরি করা
+        const newReport = {
+          lessonId: lessonId,
+          lessonTitle: lessonTitle,
+          reason: reason,
+          reportedBy: {
+            userId: userId,
+            email: userEmail,
+            name: userName,
+          },
+          status: "pending", // পরবর্তীতে এডমিন প্যানেল থেকে হ্যান্ডেল করার জন্য (যেমন: pending, resolved)
+          createdAt: new Date(), // রিপোর্ট জমা দেওয়ার সঠিক সময় ট্রাক করার জন্য
+        };
+
+        // ৪. ডেটাবেসের reportCollection-এ ডাটা সেভ করা
+        const result = await reportCollection.insertOne(newReport);
+
+        // ৫. ফ্রন্টএন্ডের রিকোয়ারমেন্ট অনুযায়ী রেসপন্স পাঠানো
+        // ফ্রন্টএন্ডে return { success: true, report: result } করা আছে, তাই পুরো রিপোর্টের অবজেক্টটি আইডি সহ ব্যাক করা হচ্ছে
+        res.status(201).send({
+          _id: result.insertedId,
+          ...newReport,
+        });
+      } catch (error) {
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
     // All patch api
 
     app.patch("/api/lessons/:id/like", async (req, res) => {
@@ -136,7 +185,70 @@ const run = async () => {
           likes: updatedLesson.likes,
         });
       } catch (error) {
-        console.error("Error liking lesson:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    app.patch("/api/lessons/:id/favorite", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        // ১. ফ্রন্টএন্ড হেডার (authHeaders) থেকে ইউজার আইডি রিসিভ করা
+        const userId = req.headers["x-user-id"];
+
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized! Please log in first." });
+        }
+
+        // আইডি ফরম্যাটের অমিল এড়াতে ডাইনামিক কুয়েরি লজিক
+        let query = {};
+        try {
+          query = { _id: id };
+        } catch (err) {
+          query = { _id: id };
+        }
+
+        // ২. লেসনটি ডেটাবেসে আছে কিনা চেক করা
+        const lesson = await allLessonCollections.findOne(query);
+
+        if (!lesson) {
+          return res.status(404).send({ error: "Lesson not found" });
+        }
+
+        // ৩. ফেভারিট টগল (Toggle) লজিক
+        const favoritesArray = lesson.favorites || [];
+        const isFavorited = favoritesArray.includes(userId);
+
+        let updateDoc = {};
+
+        if (isFavorited) {
+          // ইউজার ইতিমধ্যে ফেভারিট করে রাখলে: রিমুভ করা হবে ($pull) এবং কাউন্ট ১ কমবে
+          updateDoc = {
+            $pull: { favorites: userId },
+            $inc: { favoritesCount: -1 },
+          };
+        } else {
+          // ইউজার নতুন করে ফেভারিট করলে: যোগ করা হবে ($addToSet) এবং কাউন্ট ১ বাড়বে
+          updateDoc = {
+            $addToSet: { favorites: userId },
+            $inc: { favoritesCount: 1 },
+          };
+        }
+
+        // ৪. ডেটাবেস আপডেট করা এবং লেটেস্ট ডেটা রিটার্ন পাওয়া
+        const options = { returnDocument: "after" };
+        const updatedResult = await allLessonCollections.findOneAndUpdate(query, updateDoc, options);
+
+        // MongoDB ড্রাইভার ভার্সন সেফটি চেক
+        const updatedLesson = updatedResult.value || updatedResult;
+
+        // ৫. ফ্রন্টএন্ডের রিকোয়ারমেন্ট অনুযায়ী রেসপন্স পাঠানো
+        // (যা সরাসরি `{ success: true, ...result }` অবজেক্টে স্প্রেড হয়ে যাবে)
+        res.send({
+          favoritesCount: updatedLesson.favoritesCount || 0,
+          favorites: updatedLesson.favorites || [],
+        });
+      } catch (error) {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
