@@ -18,7 +18,7 @@ const run = async () => {
     const database = client.db("Life_lession");
     const allLessonCollections = database.collection("lessons");
     const reportCollection = database.collection("report");
-    const commentCollection = database.collection('comments')
+    const commentCollection = database.collection("comments");
 
     app.get("/", async (req, res) => {
       res.send("Hello, database is working");
@@ -71,12 +71,31 @@ const run = async () => {
       }
     });
 
+    app.get("/api/comments/:lessonId", async (req, res) => {
+      try {
+        const { lessonId } = req.params;
+
+        if (!lessonId) {
+          return res.status(400).send({ error: "Lesson ID is required" });
+        }
+
+        // ১. নির্দিষ্ট lessonId দিয়ে সব কমেন্ট খুঁজে বের করা এবং নতুন কমেন্ট সবার উপরে রাখা
+        const comments = await commentCollection.find({ lessonId: lessonId }).sort({ createdAt: -1 }).toArray();
+
+        // ২. কমেন্টগুলোর অ্যারেই রিটার্ন করা
+        res.status(200).send(comments);
+      } catch (error) {
+        console.error("Error fetching comments:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    //All post api
+
     app.post("/api/reports", async (req, res) => {
       try {
         // ১. ফ্রন্টএন্ডের বডি থেকে রিপোর্টের ডেটা রিসিভ করা
         const { lessonId, lessonTitle, reason } = req.body;
-
-        console.log("All requested data");
 
         // ২. ফ্রন্টএন্ড হেডার (authHeaders) থেকে রিপোর্টার (Reporter) এর তথ্য রিসিভ করা
         const userId = req.headers["x-user-id"];
@@ -117,6 +136,56 @@ const run = async () => {
           ...newReport,
         });
       } catch (error) {
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    app.post("/api/comments", async (req, res) => {
+      try {
+        // ১. ফ্রন্টএন্ডের বডি (body) থেকে ডেটা নেওয়া
+        const { lessonId, content } = req.body;
+
+        // ২. ফ্রন্টএন্ডের হেডার (authHeaders) থেকে ইউজারের তথ্য রিসিভ করা
+        const userId = req.headers["x-user-id"];
+        const userName = req.headers["x-user-name"];
+        const userPhoto = req.headers["x-user-photo"];
+        const userEmail = req.headers["x-user-email"];
+
+        // অথেনটিকেশন চেক
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized! Please log in first." });
+        }
+
+        // ইনপুট ভ্যালিডেশন
+        if (!lessonId || !content || content.trim() === "") {
+          return res.status(400).send({ error: "Lesson ID and comment content are required." });
+        }
+
+        // ৩. নতুন কমেন্টের অবজেক্ট তৈরি করা
+        const newComment = {
+          lessonId: lessonId,
+          content: content.trim(),
+          user: {
+            userId: userId,
+            name: userName || "Anonymous",
+            photo: userPhoto || "",
+            email: userEmail || "",
+          },
+          createdAt: new Date(), // কমেন্ট করার সময়
+          updatedAt: new Date(),
+        };
+
+        // ৪. ডেটাবেসে কমেন্ট সেভ করা
+        const result = await commentCollection.insertOne(newComment);
+
+        const savedComment = {
+          _id: result.insertedId,
+          ...newComment,
+        };
+
+        res.status(201).send(savedComment);
+      } catch (error) {
+        console.error("Error adding comment:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
@@ -252,8 +321,6 @@ const run = async () => {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
-
-
   } finally {
     app.listen(port, () => {
       console.log(`Example app listening on port ${port}`);
