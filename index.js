@@ -19,7 +19,8 @@ const run = async () => {
     const allLessonCollections = database.collection("lessons");
     const reportCollection = database.collection("report");
     const commentCollection = database.collection("comments");
-    const subscriptionsCollection = database.collection("subscriptions")
+    const subscriptionsCollection = database.collection("subscriptions");
+    const userCollection = database.collection("user")
 
     app.get("/", async (req, res) => {
       res.send("Hello, database is working");
@@ -61,7 +62,13 @@ const run = async () => {
     app.get("/api/all/public/lessons/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        const query = { _id: id };
+        let query = {};
+        try {
+          query = {_id: new ObjectId(id)};
+        } catch (error) {
+          query = {_id: id};
+        }
+        console.log(query, "Search Id");
         const result = await allLessonCollections.findOne(query);
         if (!result) {
           return res.status(404).send({ message: "Lesson data not found" });
@@ -80,10 +87,8 @@ const run = async () => {
           return res.status(400).send({ error: "Lesson ID is required" });
         }
 
-        // ১. নির্দিষ্ট lessonId দিয়ে সব কমেন্ট খুঁজে বের করা এবং নতুন কমেন্ট সবার উপরে রাখা
         const comments = await commentCollection.find({ lessonId: lessonId }).sort({ createdAt: -1 }).toArray();
 
-        // ২. কমেন্টগুলোর অ্যারেই রিটার্ন করা
         res.status(200).send(comments);
       } catch (error) {
         console.error("Error fetching comments:", error);
@@ -192,14 +197,47 @@ const run = async () => {
     });
 
     //pricing post api
-    app.post("/api/pricing", async(req, res)=>{
-      const pricingData = req.body
+    app.post("/api/pricing", async (req, res) => {
+      const pricingData = req.body;
 
-      const addSubscribe = await subscriptionsCollection.insertOne(pricingData);
+      const newData = {
+        ...pricingData,
+        createdAt: new Date(),
+      }
 
-      res.send(addSubscribe)
+      const addSubscribe = await subscriptionsCollection.insertOne(newData);
 
-    })
+      const filter = { email: pricingData.email };
+      // update the value of the 'quantity' field to 5
+      const updateDocument = {
+        $set: {
+          plan: pricingData.planId,
+        },
+      };
+      const result = await userCollection.updateOne(filter, updateDocument);
+
+      res.send(result);
+    });
+
+    //lesson post
+    app.post("/api/user/dashboard/add/lesson", async(req, res)=>{
+      const header = req.headers
+      const bodyData = req.body
+
+
+
+      const newLessonData = {
+        ...bodyData,
+        creatorId: header["x-user-id"],
+        creatorName: header["x-user-name"],
+        creatorPhoto: header["x-user-photo"],
+        createdAt: new Date()
+      };
+
+      const result = await allLessonCollections.insertOne(newLessonData);
+      res.send(result)
+      
+    });
 
     // All patch api
 
