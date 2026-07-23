@@ -19,6 +19,7 @@ const run = async () => {
     const allLessonCollections = database.collection("lessons");
     const reportCollection = database.collection("report");
     const commentCollection = database.collection("comments");
+    const subscriptionsCollection = database.collection("subscriptions")
 
     app.get("/", async (req, res) => {
       res.send("Hello, database is working");
@@ -189,6 +190,16 @@ const run = async () => {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
+
+    //pricing post api
+    app.post("/api/pricing", async(req, res)=>{
+      const pricingData = req.body
+
+      const addSubscribe = await subscriptionsCollection.insertOne(pricingData);
+
+      res.send(addSubscribe)
+
+    })
 
     // All patch api
 
