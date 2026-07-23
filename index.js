@@ -249,23 +249,24 @@ const run = async () => {
           return res.status(401).send({ error: "Unauthorized! User ID is missing." });
         }
 
-        let result = null;
+        let lessonResult = null;
         try {
-          query = { _id: new ObjectId(id) };
+          lessonResult = await allLessonCollections.findOne({ _id: new ObjectId(id) });
         } catch (err) {
-          query = { _id: id };
         }
 
-        // ২. প্রথমে লেসনটি ডেটাবেসে আছে কিনা খুঁজে বের করা
-        const lesson = await allLessonCollections.findOne(query);
+        if(!lessonResult){
+          lessonResult = await allLessonCollections.findOne({_id: id})
+        }
 
-        if (!lesson) {
+
+        if (!lessonResult) {
           return res.status(404).send({ error: "Lesson not found" });
         }
 
         // ৩. লাইক টগল (Toggle) লজিক
         // যদি likes অ্যারে না থাকে তবে একটি খালি অ্যারে ডিফাইন করে নেওয়া
-        const likesArray = lesson.likes || [];
+        const likesArray = lessonResult.likes || [];
 
         // ইউজার কি ইতিমধ্যে লাইক দিয়ে রেখেছে?
         const isLiked = likesArray.includes(userId);
@@ -288,7 +289,7 @@ const run = async () => {
 
         // ৪. ডেটাবেস আপডেট করা এবং নতুন আপডেট হওয়া ডেটা রিটার্ন পাওয়া
         const options = { returnDocument: "after" }; // আপডেটের পরের লেটেস্ট ডেটা পাওয়ার জন্য
-        const updatedResult = await allLessonCollections.findOneAndUpdate(query, updateDoc, options);
+        const updatedResult = await allLessonCollections.findOneAndUpdate(lessonResult, updateDoc, options);
 
         // MongoDB-র ড্রাইভার ভার্সন ভেদে ভ্যালু সরাসরি বা .value এর ভেতর থাকতে পারে
         const updatedLesson = updatedResult.value || updatedResult;
