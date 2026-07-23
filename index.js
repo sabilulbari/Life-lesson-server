@@ -62,14 +62,17 @@ const run = async () => {
     app.get("/api/all/public/lessons/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        let query = {};
-        try {
-          query = {_id: new ObjectId(id)};
-        } catch (error) {
-          query = {_id: id};
+        
+        let result = null;
+
+        try{
+          result = await allLessonCollections.findOne({_id: new ObjectId(id)})
+        }catch(err){}
+
+        if(!result){
+          result = await allLessonCollections.findOne({_id: id})
         }
-        console.log(query, "Search Id");
-        const result = await allLessonCollections.findOne(query);
+
         if (!result) {
           return res.status(404).send({ message: "Lesson data not found" });
         }
@@ -148,26 +151,21 @@ const run = async () => {
 
     app.post("/api/comments", async (req, res) => {
       try {
-        // ১. ফ্রন্টএন্ডের বডি (body) থেকে ডেটা নেওয়া
         const { lessonId, content } = req.body;
 
-        // ২. ফ্রন্টএন্ডের হেডার (authHeaders) থেকে ইউজারের তথ্য রিসিভ করা
         const userId = req.headers["x-user-id"];
         const userName = req.headers["x-user-name"];
         const userPhoto = req.headers["x-user-photo"];
         const userEmail = req.headers["x-user-email"];
 
-        // অথেনটিকেশন চেক
         if (!userId) {
           return res.status(401).send({ error: "Unauthorized! Please log in first." });
         }
 
-        // ইনপুট ভ্যালিডেশন
         if (!lessonId || !content || content.trim() === "") {
           return res.status(400).send({ error: "Lesson ID and comment content are required." });
         }
 
-        // ৩. নতুন কমেন্টের অবজেক্ট তৈরি করা
         const newComment = {
           lessonId: lessonId,
           content: content.trim(),
@@ -177,11 +175,10 @@ const run = async () => {
             photo: userPhoto || "",
             email: userEmail || "",
           },
-          createdAt: new Date(), // কমেন্ট করার সময়
+          createdAt: new Date(),
           updatedAt: new Date(),
         };
 
-        // ৪. ডেটাবেসে কমেন্ট সেভ করা
         const result = await commentCollection.insertOne(newComment);
 
         const savedComment = {
@@ -252,10 +249,9 @@ const run = async () => {
           return res.status(401).send({ error: "Unauthorized! User ID is missing." });
         }
 
-        // আগের আইডি সমস্যার কারণে অবজেক্ট আইডি বা স্ট্রিং আইডি ডাইনামিকলি হ্যান্ডেল করা
-        let query = {};
+        let result = null;
         try {
-          query = { _id: id };
+          query = { _id: new ObjectId(id) };
         } catch (err) {
           query = { _id: id };
         }
@@ -321,7 +317,7 @@ const run = async () => {
         // আইডি ফরম্যাটের অমিল এড়াতে ডাইনামিক কুয়েরি লজিক
         let query = {};
         try {
-          query = { _id: id };
+          query = { _id: new ObjectId(id) };
         } catch (err) {
           query = { _id: id };
         }
