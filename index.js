@@ -308,24 +308,20 @@ const run = async () => {
       try {
         const { id } = req.params;
 
-        // ১. ফ্রন্টএন্ড হেডার (authHeaders) থেকে ইউজার আইডি রিসিভ করা
         const userId = req.headers["x-user-id"];
 
         if (!userId) {
           return res.status(401).send({ error: "Unauthorized! Please log in first." });
         }
 
-        // আইডি ফরম্যাটের অমিল এড়াতে ডাইনামিক কুয়েরি লজিক
-        let query = {};
+        let lessonResult = null;
         try {
-          query = { _id: new ObjectId(id) };
-        } catch (err) {
-          query = { _id: id };
+          lessonResult = await allLessonCollections.findOne({ _id: new ObjectId(id) });
+        } catch (err) {}
+
+        if (!lessonResult) {
+          lessonResult = await allLessonCollections.findOne({ _id: id });
         }
-
-        // ২. লেসনটি ডেটাবেসে আছে কিনা চেক করা
-        const lesson = await allLessonCollections.findOne(query);
-
         if (!lesson) {
           return res.status(404).send({ error: "Lesson not found" });
         }
@@ -352,7 +348,7 @@ const run = async () => {
 
         // ৪. ডেটাবেস আপডেট করা এবং লেটেস্ট ডেটা রিটার্ন পাওয়া
         const options = { returnDocument: "after" };
-        const updatedResult = await allLessonCollections.findOneAndUpdate(query, updateDoc, options);
+        const updatedResult = await allLessonCollections.findOneAndUpdate(lessonResult, updateDoc, options);
 
         // MongoDB ড্রাইভার ভার্সন সেফটি চেক
         const updatedLesson = updatedResult.value || updatedResult;
