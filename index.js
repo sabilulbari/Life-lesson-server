@@ -82,6 +82,7 @@ const run = async () => {
       }
     });
 
+
     app.get("/api/comments/:lessonId", async (req, res) => {
       try {
         const { lessonId } = req.params;
@@ -97,6 +98,14 @@ const run = async () => {
         console.error("Error fetching comments:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
+    });
+
+    app.get("/api/lessons/my-lessons/:userId", async(req, res)=>{
+      const { userId } = req.params;
+
+      const result = await allLessonCollections.find({ creatorId: userId }).toArray();
+
+      res.send(result)
     });
 
     //All post api
@@ -315,6 +324,7 @@ const run = async () => {
         }
 
         let lessonResult = null;
+        
         try {
           lessonResult = await allLessonCollections.findOne({ _id: new ObjectId(id) });
         } catch (err) {}
@@ -322,12 +332,12 @@ const run = async () => {
         if (!lessonResult) {
           lessonResult = await allLessonCollections.findOne({ _id: id });
         }
-        if (!lesson) {
+        if (!lessonResult) {
           return res.status(404).send({ error: "Lesson not found" });
         }
 
         // ৩. ফেভারিট টগল (Toggle) লজিক
-        const favoritesArray = lesson.favorites || [];
+        const favoritesArray = lessonResult.favorites || [];
         const isFavorited = favoritesArray.includes(userId);
 
         let updateDoc = {};
