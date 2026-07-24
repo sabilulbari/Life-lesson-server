@@ -368,12 +368,14 @@ const run = async () => {
       }
     });
 
-    app.patch("/api/lessons/:id", async (req, res) => {
+    // PUT update lesson
+    app.put("/api/lessons/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        const updateData = req.body;
 
         const userId = req.headers["x-user-id"];
+        const userPlan = req.headers["x-user-plan"];
+
         if (!userId) {
           return res.status(401).send({ error: "Unauthorized! User ID missing." });
         }
@@ -381,7 +383,8 @@ const run = async () => {
         let lesson = null;
         try {
           lesson = await allLessonCollections.findOne({ _id: new ObjectId(id) });
-        } catch (err) {}
+        } catch (err) {
+        }
 
         if (!lesson) {
           lesson = await allLessonCollections.findOne({ _id: id });
@@ -391,25 +394,39 @@ const run = async () => {
           return res.status(404).send({ error: "Lesson not found" });
         }
 
-        const query = lesson._id ? { _id: lesson._id } : { _id: id };
+        if (lesson.creatorId !== userId) {
+          return res.status(403).send({ error: "Forbidden! You can only edit your own lesson." });
+        }
 
-        const updateDoc = {
-          $set: {
-            ...updateData,
-            updatedAt: new Date(),
-          },
+        const { title, description, category, emotionalTone, image, accessLevel, visibility } = req.body;
+
+        const updatedData = {
+          title: title || lesson.title,
+          description: description || lesson.description,
+          category: category || lesson.category,
+          emotionalTone: emotionalTone || lesson.emotionalTone,
+          image: image !== undefined ? image : lesson.image,
+          visibility: visibility || lesson.visibility,
+          updatedAt: new Date(),
         };
 
-        await allLessonCollections.updateOne(query, updateDoc);
+        if (userPlan === "premium") {
+          updatedData.accessLevel = accessLevel || lesson.accessLevel;
+        } else {
+          updatedData.accessLevel = "Free";
+        }
+
+        const query = lesson._id ? { _id: lesson._id } : { _id: id };
+        await allLessonCollections.updateOne(query, { $set: updatedData });
 
         const updatedLesson = await allLessonCollections.findOne(query);
-
         res.send(updatedLesson);
       } catch (error) {
         console.error("Error updating lesson:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
+
   } finally {
     app.listen(port, () => {
       console.log(`Example app listening on port ${port}`);
