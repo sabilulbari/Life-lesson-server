@@ -20,7 +20,7 @@ const run = async () => {
     const reportCollection = database.collection("report");
     const commentCollection = database.collection("comments");
     const subscriptionsCollection = database.collection("subscriptions");
-    const userCollection = database.collection("user")
+    const userCollection = database.collection("user");
 
     app.get("/", async (req, res) => {
       res.send("Hello, database is working");
@@ -62,15 +62,15 @@ const run = async () => {
     app.get("/api/all/public/lessons/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        
+
         let result = null;
 
-        try{
-          result = await allLessonCollections.findOne({_id: new ObjectId(id)})
-        }catch(err){}
+        try {
+          result = await allLessonCollections.findOne({ _id: new ObjectId(id) });
+        } catch (err) {}
 
-        if(!result){
-          result = await allLessonCollections.findOne({_id: id})
+        if (!result) {
+          result = await allLessonCollections.findOne({ _id: id });
         }
 
         if (!result) {
@@ -81,7 +81,6 @@ const run = async () => {
         res.status(500).send({ message: "Internal Server Error" });
       }
     });
-
 
     app.get("/api/comments/:lessonId", async (req, res) => {
       try {
@@ -100,12 +99,12 @@ const run = async () => {
       }
     });
 
-    app.get("/api/lessons/my-lessons/:userId", async(req, res)=>{
+    app.get("/api/lessons/my-lessons/:userId", async (req, res) => {
       const { userId } = req.params;
 
       const result = await allLessonCollections.find({ creatorId: userId }).toArray();
 
-      res.send(result)
+      res.send(result);
     });
 
     //All post api
@@ -209,7 +208,7 @@ const run = async () => {
       const newData = {
         ...pricingData,
         createdAt: new Date(),
-      }
+      };
 
       const addSubscribe = await subscriptionsCollection.insertOne(newData);
 
@@ -226,23 +225,20 @@ const run = async () => {
     });
 
     //lesson post
-    app.post("/api/user/dashboard/add/lesson", async(req, res)=>{
-      const header = req.headers
-      const bodyData = req.body
-
-
+    app.post("/api/user/dashboard/add/lesson", async (req, res) => {
+      const header = req.headers;
+      const bodyData = req.body;
 
       const newLessonData = {
         ...bodyData,
         creatorId: header["x-user-id"],
         creatorName: header["x-user-name"],
         creatorPhoto: header["x-user-photo"],
-        createdAt: new Date()
+        createdAt: new Date(),
       };
 
       const result = await allLessonCollections.insertOne(newLessonData);
-      res.send(result)
-      
+      res.send(result);
     });
 
     // All patch api
@@ -261,13 +257,11 @@ const run = async () => {
         let lessonResult = null;
         try {
           lessonResult = await allLessonCollections.findOne({ _id: new ObjectId(id) });
-        } catch (err) {
-        }
+        } catch (err) {}
 
-        if(!lessonResult){
-          lessonResult = await allLessonCollections.findOne({_id: id})
+        if (!lessonResult) {
+          lessonResult = await allLessonCollections.findOne({ _id: id });
         }
-
 
         if (!lessonResult) {
           return res.status(404).send({ error: "Lesson not found" });
@@ -324,7 +318,7 @@ const run = async () => {
         }
 
         let lessonResult = null;
-        
+
         try {
           lessonResult = await allLessonCollections.findOne({ _id: new ObjectId(id) });
         } catch (err) {}
@@ -370,6 +364,49 @@ const run = async () => {
           favorites: updatedLesson.favorites || [],
         });
       } catch (error) {
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    app.patch("/api/lessons/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const updateData = req.body;
+
+        const userId = req.headers["x-user-id"];
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized! User ID missing." });
+        }
+
+        let lesson = null;
+        try {
+          lesson = await allLessonCollections.findOne({ _id: new ObjectId(id) });
+        } catch (err) {}
+
+        if (!lesson) {
+          lesson = await allLessonCollections.findOne({ _id: id });
+        }
+
+        if (!lesson) {
+          return res.status(404).send({ error: "Lesson not found" });
+        }
+
+        const query = lesson._id ? { _id: lesson._id } : { _id: id };
+
+        const updateDoc = {
+          $set: {
+            ...updateData,
+            updatedAt: new Date(),
+          },
+        };
+
+        await allLessonCollections.updateOne(query, updateDoc);
+
+        const updatedLesson = await allLessonCollections.findOne(query);
+
+        res.send(updatedLesson);
+      } catch (error) {
+        console.error("Error updating lesson:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
