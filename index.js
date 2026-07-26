@@ -19,8 +19,10 @@ const run = async () => {
     const allLessonCollections = database.collection("lessons");
     const reportCollection = database.collection("report");
     const commentCollection = database.collection("comments");
+    const favoritesCollection = database.collection("favorite_lesson");
     const subscriptionsCollection = database.collection("subscriptions");
     const userCollection = database.collection("user");
+    const totalLikeFavoriteByUserCollection = database.collection("userLikeAndFav");
 
     app.get("/", async (req, res) => {
       res.send("Hello, database is working");
@@ -104,6 +106,21 @@ const run = async () => {
 
       const result = await allLessonCollections.find({ creatorId: userId }).toArray();
 
+      let totalFavorite = 0;
+
+      for (lesson of result) {
+        totalFavorite += lesson.favoritesCount;
+      }
+      const totalLesson = result.length;
+
+      const myLesson = { lessons: result, totalFavorite, totalLesson };
+
+      res.send(myLesson);
+    });
+
+    app.get("/api/lesson/my-favorites/:userId", async (req, res) => {
+      const { userId } = req.params;
+      const result = await favoritesCollection.find({ userId }).toArray();
       res.send(result);
     });
 
@@ -310,7 +327,6 @@ const run = async () => {
     app.patch("/api/lessons/:id/favorite", async (req, res) => {
       try {
         const { id } = req.params;
-
         const userId = req.headers["x-user-id"];
 
         if (!userId) {
@@ -326,9 +342,12 @@ const run = async () => {
         if (!lessonResult) {
           lessonResult = await allLessonCollections.findOne({ _id: id });
         }
+
         if (!lessonResult) {
           return res.status(404).send({ error: "Lesson not found" });
         }
+
+        const stringLessonId = lessonResult._id.toString(); // ID-কে String হিসেবে নিয়ে নেওয়া হলো
 
         // ৩. ফেভারিট টগল (Toggle) লজিক
         const favoritesArray = lessonResult.favorites || [];
@@ -342,28 +361,51 @@ const run = async () => {
             $pull: { favorites: userId },
             $inc: { favoritesCount: -1 },
           };
+
+          // 💥 FIX HERE: lessonId-কে String বানিয়ে ডিলিট করতে হবে
+          await favoritesCollection.deleteMany({
+            lessonId: stringLessonId,
+            userId: userId,
+          });
         } else {
-          // ইউজার নতুন করে ফেভারিট করলে: যোগ করা হবে ($addToSet) এবং কাউন্ট ১ বাড়বে
+          // ইউজার নতুন করে ফেভারিট করলে: যোগ করা হবে ($addToSet) এবং কাউন্ট ১ বাড়বে
           updateDoc = {
             $addToSet: { favorites: userId },
             $inc: { favoritesCount: 1 },
           };
+
+          // আগের কোনো ডুপ্লিকেট থাকলে তা পরিষ্কার করে নতুন ইনসার্ট করা
+          await favoritesCollection.deleteMany({
+            userId: userId,
+            lessonId: stringLessonId,
+          });
+
+          // favoritesCollection-এ নতুন অবজেক্ট ডাটা ইনসার্ট করা
+          await favoritesCollection.insertOne({
+            userId: userId,
+            lessonId: stringLessonId,
+            title: lessonResult.title,
+            category: lessonResult.category,
+            emotionalTone: lessonResult.emotionalTone,
+            creatorName: lessonResult.creatorName,
+            createdAt: new Date(),
+          });
         }
 
-        // ৪. ডেটাবেস আপডেট করা এবং লেটেস্ট ডেটা রিটার্ন পাওয়া
+        // ৪. ডেটাবেস আপডেট করা এবং লেটেস্ট ডেটা রিটার্ন পাওয়া
         const options = { returnDocument: "after" };
-        const updatedResult = await allLessonCollections.findOneAndUpdate(lessonResult, updateDoc, options);
+        const updatedResult = await allLessonCollections.findOneAndUpdate({ _id: lessonResult._id }, updateDoc, options);
 
-        // MongoDB ড্রাইভার ভার্সন সেফটি চেক
         const updatedLesson = updatedResult.value || updatedResult;
 
-        // ৫. ফ্রন্টএন্ডের রিকোয়ারমেন্ট অনুযায়ী রেসপন্স পাঠানো
-        // (যা সরাসরি `{ success: true, ...result }` অবজেক্টে স্প্রেড হয়ে যাবে)
+        // ৫. ফ্রন্টএন্ডে রেসপন্স পাঠানো
         res.send({
-          favoritesCount: updatedLesson.favoritesCount || 0,
+          favoritesCount: Math.max(0, updatedLesson.favoritesCount || 0),
           favorites: updatedLesson.favorites || [],
+          isFavorited: !isFavorited,
         });
       } catch (error) {
+        console.error("Favorite Toggle Error:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
@@ -383,8 +425,7 @@ const run = async () => {
         let lesson = null;
         try {
           lesson = await allLessonCollections.findOne({ _id: new ObjectId(id) });
-        } catch (err) {
-        }
+        } catch (err) {}
 
         if (!lesson) {
           lesson = await allLessonCollections.findOne({ _id: id });
@@ -427,6 +468,42 @@ const run = async () => {
       }
     });
 
+    //delete lesson
+    app.delete("/api/lessons/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const userId = req.headers["x-user-id"];
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized! User ID missing." });
+        }
+
+        let lesson = null;
+        try {
+          lesson = await allLessonCollections.findOne({ _id: new ObjectId(id) });
+        } catch (err) {}
+
+        if (!lesson) {
+          lesson = await allLessonCollections.findOne({ _id: id });
+        }
+
+        if (!lesson) {
+          return res.status(404).send({ error: "Lesson not found" });
+        }
+
+        if (lesson.creatorId !== userId) {
+          return res.status(403).send({ error: "Forbidden! You can only delete your own lesson." });
+        }
+
+        const query = lesson._id ? { _id: lesson._id } : { _id: id };
+        await allLessonCollections.deleteOne(query);
+
+        res.send({ message: "Lesson deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting lesson:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
   } finally {
     app.listen(port, () => {
       console.log(`Example app listening on port ${port}`);
