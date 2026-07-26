@@ -123,6 +123,26 @@ const run = async () => {
       const result = await favoritesCollection.find({ userId }).toArray();
       res.send(result);
     });
+    app.get("/api/dashboard/admin/all/users", async (req, res) => {
+      const adminRole = req.headers["x-user-role"];
+      const userId = req.headers["x-user-id"];
+
+      if (adminRole !== "admin" && !userId) {
+        return res.status(401).send({ message: "Unauthorize access" });
+      }
+
+      const users = await userCollection.find().toArray();
+
+      for(const user of users){
+        const filter = {
+          creatorId: user._id.toString(),
+        };
+        const lessonCount = await allLessonCollections.countDocuments(filter);
+        user.totalLessonCreated = lessonCount;
+      }
+
+      res.send(users);
+    });
 
     //All post api
 
