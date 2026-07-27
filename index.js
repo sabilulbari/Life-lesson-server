@@ -144,6 +144,47 @@ const run = async () => {
       res.send(users);
     });
 
+    app.get("/api/lessons/admin-all", async (req, res) => {
+  try {
+    // ১. রিকোয়েস্ট হেডার থেকে ইউজার আইডি চেক
+    const userId = req.headers["x-user-id"];
+    if (!userId) {
+      return res.status(401).send({ error: "Unauthorized access" });
+    }
+
+    // ২. URL-এর query parameters নেওয়া
+    const { category, visibility, isReviewed } = req.query;
+
+    // ৩. একটি খালি filter অবজেক্ট তৈরি করা
+    const filter = {};
+
+    // ৪. কন্ডিশন অনুযায়ী ফিল্টারে ডাটা যোগ করা (যদি ফাঁকা না থাকে)
+    if (category && category !== "") {
+      filter.category = category;
+    }
+
+    if (visibility && visibility !== "") {
+      filter.visibility = visibility;
+    }
+
+    // boolean বা string হ্যান্ডেল করার সহজ উপায়
+    if (isReviewed !== undefined && isReviewed !== "") {
+      // যদি কোয়েরিতে "true" বা "false" স্ট্রিং আকারে আসে, তবে boolean-এ রূপান্তর করা
+      filter.isReviewed = isReviewed === "true"; 
+    }
+
+    // ৫. ডাটাবেস থেকে ফিল্টার অনুযায়ী ডাটা খুঁজে নিয়ে আস
+    const lessons = await allLessonCollections.find(filter).toArray();
+
+    // ৬. ডাটা ফ্রন্টএন্ডে পাঠানো
+    res.send(lessons);
+
+  } catch (error) {
+    console.error("Error fetching admin lessons:", error);
+    res.status(500).send({ error: "Internal Server Error" });
+  }
+});
+
     //All post api
 
     app.post("/api/reports", async (req, res) => {
@@ -482,6 +523,52 @@ const run = async () => {
         });
       } catch (error) {
         console.error("Error updating user role:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+
+    app.patch("/api/lessons/:id/feature", async (req, res) => {
+      try {
+        // ১. রিকোয়েস্ট হেডার থেকে ইউজার আইডি চেক
+        const userId = req.headers["x-user-id"];
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized access" });
+        }
+
+        const { id } = req.params;
+
+        // ২. ObjectId বা String ফিল্টার তৈরি করা
+        let filter = { _id: id };
+        if (ObjectId.isValid(id)) {
+          filter = { _id: new ObjectId(id) };
+        }
+
+        // ৩. প্রথমে লেসনটি খুঁজে বের করা
+        const lesson = await allLessonCollections.findOne(filter);
+
+        if (!lesson) {
+          return res.status(404).send({ error: "Lesson not found" });
+        }
+
+        // ৪. বর্তমান featured স্ট্যাটাস টগল (Toggle) করা
+        // যদি featured সত্য (true) থাকে তবে মিথ্যা (false) হবে, আর না থাকলে true হবে
+        const newFeaturedStatus = !lesson.featured;
+
+        // ৫. ডাটাবেসে আপডেট করা
+        const updateDoc = {
+          $set: { featured: newFeaturedStatus },
+        };
+
+        await allLessonCollections.updateOne(filter, updateDoc);
+
+        // ৬. ফ্রন্টএন্ডে রেসপন্স পাঠানো
+        res.send({
+          message: "Featured status updated successfully",
+          featured: newFeaturedStatus,
+        });
+      } catch (error) {
+        console.error("Error toggling featured status:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
