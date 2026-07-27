@@ -133,7 +133,7 @@ const run = async () => {
 
       const users = await userCollection.find().toArray();
 
-      for(const user of users){
+      for (const user of users) {
         const filter = {
           creatorId: user._id.toString(),
         };
@@ -430,6 +430,62 @@ const run = async () => {
       }
     });
 
+    app.patch("/api/users/admin/role", async (req, res) => {
+      try {
+        // ১. রিকোয়েস্ট হেডার থেকে এডমিন ইনফো নেওয়া
+        const adminUserId = req.headers["x-user-id"];
+        const adminUserRole = req.headers["x-user-role"];
+
+        // ২. এডমিন অথেনটিকেশন ও অথরাইজেশন চেক
+        if (!adminUserId || adminUserRole !== "admin") {
+          return res.status(403).send({ error: "Forbidden! Admin access required." });
+        }
+
+        // ৩. বডি থেকে targetUserId এবং newRole রিসিভ করা
+        const { targetUserId, newRole } = req.body;
+
+
+        if (!targetUserId || !newRole) {
+          return res.status(400).send({ error: "Missing required fields: targetUserId and newRole." });
+        }
+
+        // ৪. এডমিন যেন নিজের রোল নিজে চেঞ্জ করতে না পারে (Backend protection)
+        if (adminUserId === targetUserId) {
+          return res.status(400).send({ error: "You cannot change your own role!" });
+        }
+
+        // ৫. Target User ID ভ্যালিডObjectId কিনা তা চেক করে কুয়েরি ফিল্টার তৈরি
+        let userFilter = { _id: targetUserId };
+
+        if (ObjectId.isValid(targetUserId)) {
+          userFilter = { _id: new ObjectId(targetUserId) };
+        }
+
+        // ৬. ডাটাবেসে ইউজার এর রোল আপডেট করা
+        const updateDoc = {
+          $set: { role: newRole },
+        };
+
+        const options = { returnDocument: "after" }; // আপডেটেড ডাটা ফেরত পাওয়ার জন্য
+        const result = await userCollection.findOneAndUpdate(userFilter, updateDoc, options);
+
+        const updatedUser = result.value || result;
+
+        if (!updatedUser) {
+          return res.status(404).send({ error: "Target user not found!" });
+        }
+
+        // ৭. ফ্রন্টএন্ডের জন্য রেসপন্স পাঠানো
+        res.send({
+          message: "Role updated successfully",
+          user: updatedUser,
+        });
+      } catch (error) {
+        console.error("Error updating user role:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
     // PUT update lesson
     app.put("/api/lessons/:id", async (req, res) => {
       try {
@@ -519,6 +575,43 @@ const run = async () => {
         await allLessonCollections.deleteOne(query);
 
         res.send({ message: "Lesson deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting lesson:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    app.delete("/api/users/admin/:targetUserId", async (req, res) => {
+      const {targetUserId} = req.params;
+      const adminId = req.headers["x-user-id"];
+      const adminRole = req.headers["x-user-role"];
+
+      console.log(targetUserId, adminId, adminRole);
+
+      if(!adminId && adminRole !== "admin"){
+        return res.status(401).send({message: "Unauthorize access"})
+      }
+
+      try {
+
+        let lesson = null;
+        try {
+
+          lesson = await allLessonCollections.find({ creatorId: targetUserId }).toArray();
+        }catch(err){}
+
+        if (!lesson) {
+          return res.status(404).send({ error: "Something went wrong" });
+        }
+
+
+        const targetUserquery = { _id: new ObjectId(targetUserId) };
+        const targetUserLessonquery = { creatorId: targetUserId };
+
+        const deleteUser = await userCollection.deleteOne(targetUserquery);
+        const deleteUserAllLesson = await allLessonCollections.deleteMany(targetUserLessonquery);
+        res.send({ message: "User deleted successfully" });
+
       } catch (error) {
         console.error("Error deleting lesson:", error);
         res.status(500).send({ error: "Internal Server Error" });
