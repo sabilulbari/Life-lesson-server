@@ -193,8 +193,8 @@ const run = async () => {
                 _id: "$lessonId",
                 lessonId: { $first: "$lessonId" },
                 lessonTitle: { $first: "$lessonTitle" },
-                reportCount: { $sum: 1 }, // Counts total reports for this lesson
-                reasons: { $addToSet: "$reason" }, // Unique list of report reasons
+                reportCount: { $sum: 1 },
+                reasons: { $addToSet: "$reason" }, 
                 reports: {
                   $push: {
                     reportId: "$_id",
@@ -208,7 +208,7 @@ const run = async () => {
             },
             {
               $project: {
-                _id: 0, // Excludes the MongoDB _id wrapper field
+                _id: 0,
               },
             },
           ])
@@ -217,6 +217,18 @@ const run = async () => {
         res.send(aggregatedReports);
       } catch (error) {
         console.error("Error fetching reports:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+    app.get("/api/reports/:lessonId/details", async (req, res) => {
+      try {
+        const { lessonId } = req.params;
+
+        const reports = await reportsCollection.find({ lessonId: lessonId }).toArray();
+
+        res.send(reports);
+      } catch (error) {
+        console.error("Error fetching report details:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
