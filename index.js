@@ -530,32 +530,28 @@ const run = async () => {
 
     app.patch("/api/lessons/:id/feature", async (req, res) => {
       try {
-        // ১. রিকোয়েস্ট হেডার থেকে ইউজার আইডি চেক
         const userId = req.headers["x-user-id"];
+
+        console.log(userId);
         if (!userId) {
           return res.status(401).send({ error: "Unauthorized access" });
         }
 
         const { id } = req.params;
 
-        // ২. ObjectId বা String ফিল্টার তৈরি করা
         let filter = { _id: id };
         if (ObjectId.isValid(id)) {
           filter = { _id: new ObjectId(id) };
         }
 
-        // ৩. প্রথমে লেসনটি খুঁজে বের করা
         const lesson = await allLessonCollections.findOne(filter);
 
         if (!lesson) {
           return res.status(404).send({ error: "Lesson not found" });
         }
 
-        // ৪. বর্তমান featured স্ট্যাটাস টগল (Toggle) করা
-        // যদি featured সত্য (true) থাকে তবে মিথ্যা (false) হবে, আর না থাকলে true হবে
         const newFeaturedStatus = !lesson.featured;
 
-        // ৫. ডাটাবেসে আপডেট করা
         const updateDoc = {
           $set: { featured: newFeaturedStatus },
         };
@@ -569,6 +565,48 @@ const run = async () => {
         });
       } catch (error) {
         console.error("Error toggling featured status:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+
+    app.patch("/api/lessons/:id/review", async (req, res) => {
+      try {
+        const userId = req.headers["x-user-id"];
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized access" });
+        }
+
+        const { id } = req.params;
+
+        let filter = { _id: id };
+        if (ObjectId.isValid(id)) {
+          filter = { _id: new ObjectId(id) };
+        }
+
+        const updateDoc = {
+          $set: {
+            isReviewed: true,
+            reviewedBy: userId,
+            reviewedAt: new Date(),
+          },
+        };
+
+        const options = { returnDocument: "after" };
+        const result = await allLessonCollections.findOneAndUpdate(filter, updateDoc, options);
+
+        const updatedLesson = result.value || result;
+
+        if (!updatedLesson) {
+          return res.status(404).send({ error: "Lesson not found" });
+        }
+
+        res.send({
+          message: "Lesson marked as reviewed successfully",
+          isReviewed: updatedLesson.isReviewed,
+        });
+      } catch (error) {
+        console.error("Error marking lesson as reviewed:", error);
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
@@ -699,6 +737,47 @@ const run = async () => {
         const deleteUserAllLesson = await allLessonCollections.deleteMany(targetUserLessonquery);
         res.send({ message: "User deleted successfully" });
 
+      } catch (error) {
+        console.error("Error deleting lesson:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    app.delete("/api/dashboard/admin/lessons/:id", async (req, res) => {
+      try {
+        const userId = req.headers["x-user-id"];
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized access" });
+        }
+
+        const { id } = req.params;
+
+        // ২. ObjectId বা String ফিল্টার তৈরি করা
+        let filter = { _id: id };
+        if (ObjectId.isValid(id)) {
+          filter = { _id: new ObjectId(id) };
+        }
+
+        // ৩. মূল লেসন কলেকশন থেকে লেসনটি ডিলিট করা
+        const deleteResult = await allLessonCollections.deleteOne(filter);
+
+        if (deleteResult.deletedCount === 0) {
+          return res.status(404).send({ error: "Lesson not found" });
+        }
+
+        // ৪. (Optional কিন্তু ভালো প্র্যাকটিস) favoritesCollection থেকেও এই লেসনের ফেভারিট ডেটা ডিলিট করা
+        let favoriteFilter = { lessonId: id };
+        if (ObjectId.isValid(id)) {
+          favoriteFilter = {
+            $or: [{ lessonId: id }, { lessonId: new ObjectId(id) }],
+          };
+        }
+        await favoritesCollection.deleteMany(favoriteFilter);
+
+        // ৫. ফ্রন্টএন্ডে সাকসেস রেসপন্স পাঠানো
+        res.send({
+          message: "Lesson moderated and deleted permanently",
+        });
       } catch (error) {
         console.error("Error deleting lesson:", error);
         res.status(500).send({ error: "Internal Server Error" });
