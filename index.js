@@ -23,6 +23,7 @@ const run = async () => {
     const subscriptionsCollection = database.collection("subscriptions");
     const userCollection = database.collection("user");
     const totalLikeFavoriteByUserCollection = database.collection("userLikeAndFav");
+    const reportsCollection = database.collection("report");
 
     app.get("/", async (req, res) => {
       res.send("Hello, database is working");
@@ -108,7 +109,7 @@ const run = async () => {
 
       let totalFavorite = 0;
 
-      for (lesson of result) {
+      for (const lesson of result) {
         totalFavorite += lesson.favoritesCount;
       }
       const totalLesson = result.length;
@@ -145,45 +146,80 @@ const run = async () => {
     });
 
     app.get("/api/lessons/admin-all", async (req, res) => {
-  try {
-    // ১. রিকোয়েস্ট হেডার থেকে ইউজার আইডি চেক
-    const userId = req.headers["x-user-id"];
-    if (!userId) {
-      return res.status(401).send({ error: "Unauthorized access" });
-    }
+      try {
+        // ১. রিকোয়েস্ট হেডার থেকে ইউজার আইডি চেক
+        const userId = req.headers["x-user-id"];
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized access" });
+        }
 
-    // ২. URL-এর query parameters নেওয়া
-    const { category, visibility, isReviewed } = req.query;
+        // ২. URL-এর query parameters নেওয়া
+        const { category, visibility, isReviewed } = req.query;
 
-    // ৩. একটি খালি filter অবজেক্ট তৈরি করা
-    const filter = {};
+        // ৩. একটি খালি filter অবজেক্ট তৈরি করা
+        const filter = {};
 
-    // ৪. কন্ডিশন অনুযায়ী ফিল্টারে ডাটা যোগ করা (যদি ফাঁকা না থাকে)
-    if (category && category !== "") {
-      filter.category = category;
-    }
+        // ৪. কন্ডিশন অনুযায়ী ফিল্টারে ডাটা যোগ করা (যদি ফাঁকা না থাকে)
+        if (category && category !== "") {
+          filter.category = category;
+        }
 
-    if (visibility && visibility !== "") {
-      filter.visibility = visibility;
-    }
+        if (visibility && visibility !== "") {
+          filter.visibility = visibility;
+        }
 
-    // boolean বা string হ্যান্ডেল করার সহজ উপায়
-    if (isReviewed !== undefined && isReviewed !== "") {
-      // যদি কোয়েরিতে "true" বা "false" স্ট্রিং আকারে আসে, তবে boolean-এ রূপান্তর করা
-      filter.isReviewed = isReviewed === "true"; 
-    }
+        // boolean বা string হ্যান্ডেল করার সহজ উপায়
+        if (isReviewed !== undefined && isReviewed !== "") {
+          // যদি কোয়েরিতে "true" বা "false" স্ট্রিং আকারে আসে, তবে boolean-এ রূপান্তর করা
+          filter.isReviewed = isReviewed === "true";
+        }
 
-    // ৫. ডাটাবেস থেকে ফিল্টার অনুযায়ী ডাটা খুঁজে নিয়ে আস
-    const lessons = await allLessonCollections.find(filter).toArray();
+        // ৫. ডাটাবেস থেকে ফিল্টার অনুযায়ী ডাটা খুঁজে নিয়ে আস
+        const lessons = await allLessonCollections.find(filter).toArray();
 
-    // ৬. ডাটা ফ্রন্টএন্ডে পাঠানো
-    res.send(lessons);
+        // ৬. ডাটা ফ্রন্টএন্ডে পাঠানো
+        res.send(lessons);
+      } catch (error) {
+        console.error("Error fetching admin lessons:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+    app.get("/api/reports", async (req, res) => {
+      try {
+        const aggregatedReports = await reportsCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$lessonId",
+                lessonId: { $first: "$lessonId" },
+                lessonTitle: { $first: "$lessonTitle" },
+                reportCount: { $sum: 1 }, // Counts total reports for this lesson
+                reasons: { $addToSet: "$reason" }, // Unique list of report reasons
+                reports: {
+                  $push: {
+                    reportId: "$_id",
+                    reason: "$reason",
+                    reportedBy: "$reportedBy",
+                    status: "$status",
+                    createdAt: "$createdAt",
+                  },
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 0, // Excludes the MongoDB _id wrapper field
+              },
+            },
+          ])
+          .toArray();
 
-  } catch (error) {
-    console.error("Error fetching admin lessons:", error);
-    res.status(500).send({ error: "Internal Server Error" });
-  }
-});
+        res.send(aggregatedReports);
+      } catch (error) {
+        console.error("Error fetching reports:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
 
     //All post api
 
@@ -485,7 +521,6 @@ const run = async () => {
         // ৩. বডি থেকে targetUserId এবং newRole রিসিভ করা
         const { targetUserId, newRole } = req.body;
 
-
         if (!targetUserId || !newRole) {
           return res.status(400).send({ error: "Missing required fields: targetUserId and newRole." });
         }
@@ -527,7 +562,6 @@ const run = async () => {
       }
     });
 
-
     app.patch("/api/lessons/:id/feature", async (req, res) => {
       try {
         const userId = req.headers["x-user-id"];
@@ -568,7 +602,6 @@ const run = async () => {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
-
 
     app.patch("/api/lessons/:id/review", async (req, res) => {
       try {
@@ -707,28 +740,25 @@ const run = async () => {
     });
 
     app.delete("/api/users/admin/:targetUserId", async (req, res) => {
-      const {targetUserId} = req.params;
+      const { targetUserId } = req.params;
       const adminId = req.headers["x-user-id"];
       const adminRole = req.headers["x-user-role"];
 
       console.log(targetUserId, adminId, adminRole);
 
-      if(!adminId && adminRole !== "admin"){
-        return res.status(401).send({message: "Unauthorize access"})
+      if (!adminId && adminRole !== "admin") {
+        return res.status(401).send({ message: "Unauthorize access" });
       }
 
       try {
-
         let lesson = null;
         try {
-
           lesson = await allLessonCollections.find({ creatorId: targetUserId }).toArray();
-        }catch(err){}
+        } catch (err) {}
 
         if (!lesson) {
           return res.status(404).send({ error: "Something went wrong" });
         }
-
 
         const targetUserquery = { _id: new ObjectId(targetUserId) };
         const targetUserLessonquery = { creatorId: targetUserId };
@@ -736,7 +766,6 @@ const run = async () => {
         const deleteUser = await userCollection.deleteOne(targetUserquery);
         const deleteUserAllLesson = await allLessonCollections.deleteMany(targetUserLessonquery);
         res.send({ message: "User deleted successfully" });
-
       } catch (error) {
         console.error("Error deleting lesson:", error);
         res.status(500).send({ error: "Internal Server Error" });
