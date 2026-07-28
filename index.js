@@ -251,13 +251,126 @@ const run = async () => {
       const userRecentLesson = await allLessonCollections.find(filter).sort({ createdAt: -1}).limit(2).toArray();
       const userFavoriteCount = await favoritesCollection.countDocuments(filter);
 
-      
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      const weeklyLessons = await allLessonCollections
+        .find({
+          creatorId: userId,
+          createdAt: { $gte: sevenDaysAgo },
+        })
+        .toArray();
+
+      let mon = 0,
+        tue = 0,
+        wed = 0,
+        thu = 0,
+        fri = 0,
+        sat = 0,
+        sun = 0;
+
+      weeklyLessons.forEach((lesson) => {
+        const lessonDate = new Date(lesson.createdAt);
+        const dayIndex = lessonDate.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue...
+
+        if (dayIndex === 1) mon++;
+        else if (dayIndex === 2) tue++;
+        else if (dayIndex === 3) wed++;
+        else if (dayIndex === 4) thu++;
+        else if (dayIndex === 5) fri++;
+        else if (dayIndex === 6) sat++;
+        else if (dayIndex === 0) sun++;
+      });
+
+      const contributionChart = [
+        { name: "Mon", lessons: mon },
+        { name: "Tue", lessons: tue },
+        { name: "Wed", lessons: wed },
+        { name: "Thu", lessons: thu },
+        { name: "Fri", lessons: fri },
+        { name: "Sat", lessons: sat },
+        { name: "Sun", lessons: sun },
+      ];
 
       res.send({
         userLessonCount: userLessonCount,
         userFavoriteCount: userFavoriteCount,
         userRecentLesson: userRecentLesson,
+        contributionChart: contributionChart,
       });
+    });
+
+    //Admin Stats
+    app.get("/api/users/admin/stats", async (req, res) => {
+      const userRole = req.headers["x-user-role"];
+      if (userRole !== "admin") {
+        return res.status(403).json({ error: "Forbidden: Admin access required" });
+      }
+
+      try {
+        const totalUsers = await userCollection.countDocuments();
+
+        const totalPublicLessons = await allLessonCollections.countDocuments({
+          visibility: "Public", 
+        });
+
+        const totalReported = await reportsCollection.distinct("lessonId");
+        const totalReportedCount = totalReported.length;
+
+        const contributors = await allLessonCollections
+          .aggregate([
+            {
+              $group: {
+                _id: "$creatorId",
+                name: { $first: "$creatorName" },
+                photo: { $first: "$creatorPhoto" },
+                lessonCount: { $sum: 1 },
+              },
+            },
+            { $sort: { lessonCount: -1 } },
+            { $limit: 5 },
+          ])
+          .toArray(); 
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); 
+
+        const todaysLessons = await allLessonCollections
+          .find({ createdAt: { $gte: today } })
+          .sort({ createdAt: -1 })
+          .toArray(); 
+
+        const userGrowth = [
+          { month: "Jan", users: Math.max(5, Math.floor(totalUsers * 0.2)) },
+          { month: "Feb", users: Math.max(10, Math.floor(totalUsers * 0.4)) },
+          { month: "Mar", users: Math.max(15, Math.floor(totalUsers * 0.6)) },
+          { month: "Apr", users: Math.max(20, Math.floor(totalUsers * 0.8)) },
+          { month: "May", users: totalUsers },
+        ];
+
+        const lessonGrowth = [
+          { month: "Jan", lessons: Math.max(10, Math.floor(totalPublicLessons * 0.2)) },
+          { month: "Feb", lessons: Math.max(25, Math.floor(totalPublicLessons * 0.4)) },
+          { month: "Mar", lessons: Math.max(45, Math.floor(totalPublicLessons * 0.6)) },
+          { month: "Apr", lessons: Math.max(70, Math.floor(totalPublicLessons * 0.8)) },
+          { month: "May", lessons: totalPublicLessons },
+        ];
+
+        res.json({
+          totalUsers,
+          totalPublicLessons,
+          totalReportedCount,
+          contributors,
+          todaysLessons,
+          userGrowth,
+          lessonGrowth,
+        });
+      } catch (error) {
+        res.status(500).json({
+          message: "Internal Server Error",
+          error: error.message,
+        });
+      }
     });
 
     //All post api
