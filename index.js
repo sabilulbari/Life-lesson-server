@@ -194,7 +194,7 @@ const run = async () => {
                 lessonId: { $first: "$lessonId" },
                 lessonTitle: { $first: "$lessonTitle" },
                 reportCount: { $sum: 1 },
-                reasons: { $addToSet: "$reason" }, 
+                reasons: { $addToSet: "$reason" },
                 reports: {
                   $push: {
                     reportId: "$_id",
@@ -784,6 +784,7 @@ const run = async () => {
       }
     });
 
+    //delete  favrite and main lesson collection
     app.delete("/api/dashboard/admin/lessons/:id", async (req, res) => {
       try {
         const userId = req.headers["x-user-id"];
@@ -806,7 +807,6 @@ const run = async () => {
           return res.status(404).send({ error: "Lesson not found" });
         }
 
-        // ৪. (Optional কিন্তু ভালো প্র্যাকটিস) favoritesCollection থেকেও এই লেসনের ফেভারিট ডেটা ডিলিট করা
         let favoriteFilter = { lessonId: id };
         if (ObjectId.isValid(id)) {
           favoriteFilter = {
@@ -822,6 +822,31 @@ const run = async () => {
       } catch (error) {
         console.error("Error deleting lesson:", error);
         res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    //delete report report amd related lesson
+    app.delete("/api/reports/:lessonId/ignore/delete", async (req, res) => {
+      const { lessonId } = req.params;
+      const { deleteType } = req.body;
+
+      console.log(deleteType, "type of delete");
+      const ignoreFilter = {
+        lessonId: lessonId,
+      };
+
+      if (deleteType === "ignore") {
+        
+        const ignoreAction = await reportCollection.deleteMany(ignoreFilter);
+        return res.send(ignoreAction);
+      }else{
+        const deleteFilter = {
+          _id: new ObjectId(lessonId),
+        };
+        const ignoreAction = await reportCollection.deleteMany(ignoreFilter);
+        const deleteAction = await allLessonCollections.deleteOne(deleteFilter);
+        return res.send({ ...ignoreAction, ...deleteAction});
+
       }
     });
   } finally {
