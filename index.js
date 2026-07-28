@@ -85,6 +85,8 @@ const run = async () => {
       }
     });
 
+    app.get("")
+
     app.get("/api/comments/:lessonId", async (req, res) => {
       try {
         const { lessonId } = req.params;
