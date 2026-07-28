@@ -43,8 +43,9 @@ const run = async () => {
           query.emotionalTone = emotionalTone;
         }
 
+        // Title এবং Creator Name দুইটাতেই একসাথে সার্চ করবে
         if (search) {
-          query.title = { $regex: search, $options: "i" };
+          query.$or = [{ title: { $regex: search, $options: "i" } }, { creatorName: { $regex: search, $options: "i" } }];
         }
 
         let sortOption = {};
@@ -52,6 +53,8 @@ const run = async () => {
           sortOption.createdAt = -1;
         } else if (sort === "oldest") {
           sortOption.createdAt = 1;
+        } else if (sort === "mostSaved") {
+          sortOption.favoritesCount = -1;
         }
 
         const result = await allLessonCollections.find(query).sort(sortOption).toArray();
@@ -85,7 +88,7 @@ const run = async () => {
       }
     });
 
-    app.get("")
+    app.get("");
 
     app.get("/api/comments/:lessonId", async (req, res) => {
       try {
@@ -235,29 +238,46 @@ const run = async () => {
       }
     });
 
+    //user stats
+    app.get("/api/users/stats", async (req, res) => {
+      const userId = req.headers["x-user-id"];
+
+      const filter = {
+        creatorId: userId,
+      };
+
+
+      const userLessonCount = await allLessonCollections.countDocuments(filter);  
+      const userRecentLesson = await allLessonCollections.find(filter).sort({ createdAt: -1}).limit(2).toArray();
+      const userFavoriteCount = await favoritesCollection.countDocuments(filter);
+
+      
+
+      res.send({
+        userLessonCount: userLessonCount,
+        userFavoriteCount: userFavoriteCount,
+        userRecentLesson: userRecentLesson,
+      });
+    });
+
     //All post api
 
     app.post("/api/reports", async (req, res) => {
       try {
-        // ১. ফ্রন্টএন্ডের বডি থেকে রিপোর্টের ডেটা রিসিভ করা
         const { lessonId, lessonTitle, reason } = req.body;
 
-        // ২. ফ্রন্টএন্ড হেডার (authHeaders) থেকে রিপোর্টার (Reporter) এর তথ্য রিসিভ করা
         const userId = req.headers["x-user-id"];
         const userEmail = req.headers["x-user-email"];
         const userName = req.headers["x-user-name"];
 
-        // অথেনটিকেশন চেক
         if (!userId) {
           return res.status(401).send({ error: "Unauthorized! Please log in first." });
         }
 
-        // ভ্যালিডেশন চেক (যদি ইউজার কোনো ফিল্ড ফাঁকা রেখে সাবমিট করে)
         if (!lessonId || !lessonTitle || !reason) {
           return res.status(400).send({ error: "All fields (lessonId, lessonTitle, reason) are required." });
         }
 
-        // ৩. নতুন রিপোর্টের জন্য অবজেক্ট তৈরি করা
         const newReport = {
           lessonId: lessonId,
           lessonTitle: lessonTitle,
@@ -267,15 +287,12 @@ const run = async () => {
             email: userEmail,
             name: userName,
           },
-          status: "pending", // পরবর্তীতে এডমিন প্যানেল থেকে হ্যান্ডেল করার জন্য (যেমন: pending, resolved)
-          createdAt: new Date(), // রিপোর্ট জমা দেওয়ার সঠিক সময় ট্রাক করার জন্য
+          status: "pending",
+          createdAt: new Date(),
         };
 
-        // ৪. ডেটাবেসের reportCollection-এ ডাটা সেভ করা
         const result = await reportCollection.insertOne(newReport);
 
-        // ৫. ফ্রন্টএন্ডের রিকোয়ারমেন্ট অনুযায়ী রেসপন্স পাঠানো
-        // ফ্রন্টএন্ডে return { success: true, report: result } করা আছে, তাই পুরো রিপোর্টের অবজেক্টটি আইডি সহ ব্যাক করা হচ্ছে
         res.status(201).send({
           _id: result.insertedId,
           ...newReport,
@@ -838,17 +855,15 @@ const run = async () => {
       };
 
       if (deleteType === "ignore") {
-        
         const ignoreAction = await reportCollection.deleteMany(ignoreFilter);
         return res.send(ignoreAction);
-      }else{
+      } else {
         const deleteFilter = {
           _id: new ObjectId(lessonId),
         };
         const ignoreAction = await reportCollection.deleteMany(ignoreFilter);
         const deleteAction = await allLessonCollections.deleteOne(deleteFilter);
-        return res.send({ ...ignoreAction, ...deleteAction});
-
+        return res.send({ ...ignoreAction, ...deleteAction });
       }
     });
   } finally {
