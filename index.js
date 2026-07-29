@@ -91,7 +91,7 @@ const run = async () => {
 
         const data = await allLessonCollections.find(query).skip(skip).limit(limit).sort(sortOption).toArray();
 
-        res.send({ skip, total_page, currentPageNumber, data });
+        res.send({ skip,limit, total_page, currentPageNumber, data });
       } catch (error) {
         res.status(500).send({ message: "Internal Server Error", error: error.message });
       }
