@@ -3,6 +3,7 @@ const app = express();
 const dotenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ObjectId } = require("mongodb");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 
 dotenv.config();
 const port = process.env.PORT;
@@ -11,6 +12,30 @@ const client = new MongoClient(uri);
 
 app.use(cors());
 app.use(express.json());
+
+const JWKS = createRemoteJWKSet(new URL(`${process.env.FRONTEND_URL}/api/auth/jwks`));
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req?.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer")) {
+    res.status(401).send({ message: "Unauthorize" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  if (!token) {
+    res.status(401).send({ message: "Unauthorize access" });
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    console.log(payload, "token data")
+    next();
+  } catch (error) {
+    res.status(401).send({ message: "Unauthorize access" });
+  }
+};
 
 const run = async () => {
   try {
@@ -43,7 +68,6 @@ const run = async () => {
           query.emotionalTone = emotionalTone;
         }
 
-        // Title এবং Creator Name দুইটাতেই একসাথে সার্চ করবে
         if (search) {
           query.$or = [{ title: { $regex: search, $options: "i" } }, { creatorName: { $regex: search, $options: "i" } }];
         }
@@ -57,9 +81,17 @@ const run = async () => {
           sortOption.favoritesCount = -1;
         }
 
-        const result = await allLessonCollections.find(query).sort(sortOption).toArray();
+        const currentPageNumber = Number(req.query.currentPageNumber) || 1;
+        const limit = Number(req.query.limit) || 9;
+        const totalData = await allLessonCollections.countDocuments()
 
-        res.send(result);
+        const skip = (currentPageNumber - 1) * limit 
+        const total_page = Math.ceil(totalData/limit)
+
+
+        const data = await allLessonCollections.find(query).skip(skip).limit(limit).sort(sortOption).toArray();
+
+        res.send({ skip, total_page, currentPageNumber, data });
       } catch (error) {
         res.status(500).send({ message: "Internal Server Error", error: error.message });
       }
@@ -246,9 +278,8 @@ const run = async () => {
         creatorId: userId,
       };
 
-
-      const userLessonCount = await allLessonCollections.countDocuments(filter);  
-      const userRecentLesson = await allLessonCollections.find(filter).sort({ createdAt: -1}).limit(2).toArray();
+      const userLessonCount = await allLessonCollections.countDocuments(filter);
+      const userRecentLesson = await allLessonCollections.find(filter).sort({ createdAt: -1 }).limit(2).toArray();
       const userFavoriteCount = await favoritesCollection.countDocuments(filter);
 
       const now = new Date();
@@ -311,7 +342,7 @@ const run = async () => {
         const totalUsers = await userCollection.countDocuments();
 
         const totalPublicLessons = await allLessonCollections.countDocuments({
-          visibility: "Public", 
+          visibility: "Public",
         });
 
         const totalReported = await reportsCollection.distinct("lessonId");
@@ -330,15 +361,15 @@ const run = async () => {
             { $sort: { lessonCount: -1 } },
             { $limit: 5 },
           ])
-          .toArray(); 
+          .toArray();
 
         const today = new Date();
-        today.setHours(0, 0, 0, 0); 
+        today.setHours(0, 0, 0, 0);
 
         const todaysLessons = await allLessonCollections
           .find({ createdAt: { $gte: today } })
           .sort({ createdAt: -1 })
-          .toArray(); 
+          .toArray();
 
         const userGrowth = [
           { month: "Jan", users: Math.max(5, Math.floor(totalUsers * 0.2)) },
@@ -483,7 +514,7 @@ const run = async () => {
     });
 
     //lesson post
-    app.post("/api/user/dashboard/add/lesson", async (req, res) => {
+    app.post("/api/user/dashboard/add/lesson", verifyToken, async (req, res) => {
       const header = req.headers;
       const bodyData = req.body;
 
