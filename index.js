@@ -30,7 +30,6 @@ const verifyToken = async (req, res, next) => {
 
   try {
     const { payload } = await jwtVerify(token, JWKS);
-    console.log(payload, "token data")
     next();
   } catch (error) {
     res.status(401).send({ message: "Unauthorize access" });
@@ -599,6 +598,7 @@ const run = async () => {
     app.patch("/api/lessons/:id/favorite", async (req, res) => {
       try {
         const { id } = req.params;
+        console.log(id);
         const userId = req.headers["x-user-id"];
 
         if (!userId) {
