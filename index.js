@@ -94,6 +94,15 @@ const run = async () => {
         res.status(500).send({ message: "Internal Server Error", error: error.message });
       }
     });
+    
+    app.get("/api/public/featured/lesson", async (req, res) => {
+      const filter = {
+        featured: true,
+      };
+
+      const featureData = await allLessonCollections.find(filter).limit(6).toArray();
+      res.send(featureData);
+    });
 
     app.get("/api/all/public/lessons/details/:id", verifyToken, async (req, res) => {
       try {
@@ -135,7 +144,7 @@ const run = async () => {
       }
     });
 
-    app.get("/api/lessons/my-lessons/:userId", async (req, res) => {
+    app.get("/api/lessons/my-lessons/:userId", verifyToken, async (req, res) => {
       const { userId } = req.params;
 
       const result = await allLessonCollections.find({ creatorId: userId }).toArray();
@@ -152,12 +161,13 @@ const run = async () => {
       res.send(myLesson);
     });
 
-    app.get("/api/lesson/my-favorites/:userId", async (req, res) => {
+    app.get("/api/lesson/my-favorites/:userId", verifyToken, async (req, res) => {
       const { userId } = req.params;
       const result = await favoritesCollection.find({ userId }).toArray();
       res.send(result);
     });
-    app.get("/api/dashboard/admin/all/users", async (req, res) => {
+
+    app.get("/api/dashboard/admin/all/users", verifyToken, async (req, res) => {
       const adminRole = req.headers["x-user-role"];
       const userId = req.headers["x-user-id"];
 
@@ -178,7 +188,7 @@ const run = async () => {
       res.send(users);
     });
 
-    app.get("/api/lessons/admin-all", async (req, res) => {
+    app.get("/api/lessons/admin-all", verifyToken, async (req, res) => {
       try {
         // ১. রিকোয়েস্ট হেডার থেকে ইউজার আইডি চেক
         const userId = req.headers["x-user-id"];
@@ -217,7 +227,7 @@ const run = async () => {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
-    app.get("/api/reports", async (req, res) => {
+    app.get("/api/reports", verifyToken, async (req, res) => {
       try {
         const aggregatedReports = await reportsCollection
           .aggregate([
@@ -253,7 +263,7 @@ const run = async () => {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
-    app.get("/api/reports/:lessonId/details", async (req, res) => {
+    app.get("/api/reports/:lessonId/details", verifyToken, async (req, res) => {
       try {
         const { lessonId } = req.params;
 
@@ -266,18 +276,8 @@ const run = async () => {
       }
     });
 
-    app.get("/api/public/featured/lesson", async(req, res)=>{
-
-      const filter = {
-        featured: true
-      };
-
-      const featureData = await allLessonCollections.find(filter).limit(6).toArray()
-      res.send(featureData)
-    })
-
     //user stats
-    app.get("/api/users/stats", async (req, res) => {
+    app.get("/api/users/stats", verifyToken, async (req, res) => {
       const userId = req.headers["x-user-id"];
 
       const filter = {
@@ -338,7 +338,7 @@ const run = async () => {
     });
 
     //Admin Stats
-    app.get("/api/users/admin/stats", async (req, res) => {
+    app.get("/api/users/admin/stats", verifyToken, async (req, res) => {
       const userRole = req.headers["x-user-role"];
       if (userRole !== "admin") {
         return res.status(403).json({ error: "Forbidden: Admin access required" });
@@ -538,76 +538,76 @@ const run = async () => {
 
     // All patch api
 
-   app.patch("/api/lessons/:id/like", verifyToken, async (req, res) => {
-     try {
-       const { id } = req.params;
-       const userId = req.headers["x-user-id"];
+    app.patch("/api/lessons/:id/like", verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const userId = req.headers["x-user-id"];
 
-       if (!userId) {
-         return res.status(401).send({ error: "Unauthorized! User ID is missing." });
-       }
+        if (!userId) {
+          return res.status(401).send({ error: "Unauthorized! User ID is missing." });
+        }
 
-       if (!id) {
-         return res.status(400).send({ error: "Lesson ID is missing." });
-       }
+        if (!id) {
+          return res.status(400).send({ error: "Lesson ID is missing." });
+        }
 
-       // ১. আইডি দিয়ে lesson খুঁজে বের করা (ObjectId বা string দুই ফরম্যাটই হ্যান্ডেল করা)
-       let filter = null;
-       let lessonResult = null;
+        // ১. আইডি দিয়ে lesson খুঁজে বের করা (ObjectId বা string দুই ফরম্যাটই হ্যান্ডেল করা)
+        let filter = null;
+        let lessonResult = null;
 
-       try {
-         filter = { _id: new ObjectId(id) };
-         lessonResult = await allLessonCollections.findOne(filter);
-       } catch (err) {
-         // ObjectId কনভার্সন fail করলে string আইডি দিয়ে try করা
-         filter = { _id: id };
-         lessonResult = await allLessonCollections.findOne(filter);
-       }
+        try {
+          filter = { _id: new ObjectId(id) };
+          lessonResult = await allLessonCollections.findOne(filter);
+        } catch (err) {
+          // ObjectId কনভার্সন fail করলে string আইডি দিয়ে try করা
+          filter = { _id: id };
+          lessonResult = await allLessonCollections.findOne(filter);
+        }
 
-       if (!lessonResult) {
-         return res.status(404).send({ error: "Lesson not found" });
-       }
+        if (!lessonResult) {
+          return res.status(404).send({ error: "Lesson not found" });
+        }
 
-       // ২. লাইক টগল (Toggle) লজিক
-       const likesArray = lessonResult.likes || [];
-       const isLiked = likesArray.includes(userId);
+        // ২. লাইক টগল (Toggle) লজিক
+        const likesArray = lessonResult.likes || [];
+        const isLiked = likesArray.includes(userId);
 
-       let updateDoc = {};
+        let updateDoc = {};
 
-       if (isLiked) {
-         // ইউজার ইতিমধ্যে লাইক দিয়ে থাকলে: অ্যারে থেকে আইডি রিমুভ করা
-         updateDoc = {
-           $pull: { likes: userId },
-         };
-       } else {
-         // ইউজার নতুন লাইক দিলে: অ্যারেতে আইডি যোগ করা
-         updateDoc = {
-           $addToSet: { likes: userId },
-         };
-       }
+        if (isLiked) {
+          // ইউজার ইতিমধ্যে লাইক দিয়ে থাকলে: অ্যারে থেকে আইডি রিমুভ করা
+          updateDoc = {
+            $pull: { likes: userId },
+          };
+        } else {
+          // ইউজার নতুন লাইক দিলে: অ্যারেতে আইডি যোগ করা
+          updateDoc = {
+            $addToSet: { likes: userId },
+          };
+        }
 
-       // ৩. ডেটাবেস আপডেট করা — filter হিসেবে শুধু _id পাঠানো হচ্ছে (এটাই আসল ফিক্স)
-       const options = { returnDocument: "after" };
-       const updatedResult = await allLessonCollections.findOneAndUpdate(filter, updateDoc, options);
+        // ৩. ডেটাবেস আপডেট করা — filter হিসেবে শুধু _id পাঠানো হচ্ছে (এটাই আসল ফিক্স)
+        const options = { returnDocument: "after" };
+        const updatedResult = await allLessonCollections.findOneAndUpdate(filter, updateDoc, options);
 
-       // MongoDB driver ভার্সনভেদে ভ্যালু সরাসরি বা .value এর ভেতর থাকতে পারে
-       const updatedLesson = updatedResult?.value ?? updatedResult;
+        // MongoDB driver ভার্সনভেদে ভ্যালু সরাসরি বা .value এর ভেতর থাকতে পারে
+        const updatedLesson = updatedResult?.value ?? updatedResult;
 
-       if (!updatedLesson) {
-         return res.status(404).send({ error: "Lesson not found or update failed" });
-       }
+        if (!updatedLesson) {
+          return res.status(404).send({ error: "Lesson not found or update failed" });
+        }
 
-       // ৪. likesCount সবসময় likes অ্যারের length থেকে বের করা হচ্ছে
-       // (আলাদা $inc ব্যবহার না করে, যাতে কখনো out-of-sync না হয়)
-       res.send({
-         likesCount: updatedLesson.likes?.length || 0,
-         likes: updatedLesson.likes || [],
-       });
-     } catch (error) {
-       console.error("Like toggle error:", error);
-       res.status(500).send({ error: "Internal Server Error" });
-     }
-   });
+        // ৪. likesCount সবসময় likes অ্যারের length থেকে বের করা হচ্ছে
+        // (আলাদা $inc ব্যবহার না করে, যাতে কখনো out-of-sync না হয়)
+        res.send({
+          likesCount: updatedLesson.likes?.length || 0,
+          likes: updatedLesson.likes || [],
+        });
+      } catch (error) {
+        console.error("Like toggle error:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
 
     app.patch("/api/lessons/:id/favorite", async (req, res) => {
       try {
