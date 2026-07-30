@@ -266,6 +266,16 @@ const run = async () => {
       }
     });
 
+    app.get("/api/public/featured/lesson", async(req, res)=>{
+
+      const filter = {
+        featured: true
+      };
+
+      const featureData = await allLessonCollections.find(filter).limit(6).toArray()
+      res.send(featureData)
+    })
+
     //user stats
     app.get("/api/users/stats", async (req, res) => {
       const userId = req.headers["x-user-id"];
