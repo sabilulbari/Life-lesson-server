@@ -57,7 +57,9 @@ const run = async () => {
       try {
         const { category, emotionalTone, search, sort } = req.query;
 
-        let query = {};
+        let query = {
+          visibility: "Public"
+        };
 
         if (category) {
           query.category = category;
@@ -98,6 +100,7 @@ const run = async () => {
     app.get("/api/public/featured/lesson", async (req, res) => {
       const filter = {
         featured: true,
+        visibility: "Public"
       };
 
       const featureData = await allLessonCollections.find(filter).limit(6).toArray();
