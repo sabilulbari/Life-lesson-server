@@ -94,7 +94,7 @@ const run = async () => {
         res.status(500).send({ message: "Internal Server Error", error: error.message });
       }
     });
-    
+
     app.get("/api/public/featured/lesson", async (req, res) => {
       const filter = {
         featured: true,
@@ -412,7 +412,7 @@ const run = async () => {
 
     //All post api
 
-    app.post("/api/reports", async (req, res) => {
+    app.post("/api/reports",verifyToken, async (req, res) => {
       try {
         const { lessonId, lessonTitle, reason } = req.body;
 
@@ -452,7 +452,7 @@ const run = async () => {
       }
     });
 
-    app.post("/api/comments", async (req, res) => {
+    app.post("/api/comments", verifyToken, async (req, res) => {
       try {
         const { lessonId, content } = req.body;
 
@@ -497,7 +497,7 @@ const run = async () => {
     });
 
     //pricing post api
-    app.post("/api/pricing", async (req, res) => {
+    app.post("/api/pricing", verifyToken, async (req, res) => {
       const pricingData = req.body;
 
       const newData = {
@@ -609,7 +609,7 @@ const run = async () => {
       }
     });
 
-    app.patch("/api/lessons/:id/favorite", async (req, res) => {
+    app.patch("/api/lessons/:id/favorite",verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const userId = req.headers["x-user-id"];
@@ -695,7 +695,7 @@ const run = async () => {
       }
     });
 
-    app.patch("/api/users/admin/role", async (req, res) => {
+    app.patch("/api/users/admin/role", verifyToken, async (req, res) => {
       try {
         // ১. রিকোয়েস্ট হেডার থেকে এডমিন ইনফো নেওয়া
         const adminUserId = req.headers["x-user-id"];
@@ -750,7 +750,7 @@ const run = async () => {
       }
     });
 
-    app.patch("/api/lessons/:id/feature", async (req, res) => {
+    app.patch("/api/lessons/:id/feature", verifyToken, async (req, res) => {
       try {
         const userId = req.headers["x-user-id"];
 
@@ -790,7 +790,7 @@ const run = async () => {
       }
     });
 
-    app.patch("/api/lessons/:id/review", async (req, res) => {
+    app.patch("/api/lessons/:id/review", verifyToken, async (req, res) => {
       try {
         const userId = req.headers["x-user-id"];
         if (!userId) {
@@ -832,7 +832,7 @@ const run = async () => {
     });
 
     // PUT update lesson
-    app.put("/api/lessons/:id", async (req, res) => {
+    app.put("/api/lessons/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
 
@@ -890,7 +890,7 @@ const run = async () => {
     });
 
     //delete lesson
-    app.delete("/api/lessons/:id", async (req, res) => {
+    app.delete("/api/lessons/:id",verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
 
@@ -926,7 +926,7 @@ const run = async () => {
       }
     });
 
-    app.delete("/api/users/admin/:targetUserId", async (req, res) => {
+    app.delete("/api/users/admin/:targetUserId",verifyToken, async (req, res) => {
       const { targetUserId } = req.params;
       const adminId = req.headers["x-user-id"];
       const adminRole = req.headers["x-user-role"];
@@ -958,7 +958,7 @@ const run = async () => {
     });
 
     //delete  favrite and main lesson collection
-    app.delete("/api/dashboard/admin/lessons/:id", async (req, res) => {
+    app.delete("/api/dashboard/admin/lessons/:id", verifyToken, async (req, res) => {
       try {
         const userId = req.headers["x-user-id"];
         if (!userId) {
@@ -999,7 +999,7 @@ const run = async () => {
     });
 
     //delete report report amd related lesson
-    app.delete("/api/reports/:lessonId/ignore/delete", async (req, res) => {
+    app.delete("/api/reports/:lessonId/ignore/delete",verifyToken, async (req, res) => {
       const { lessonId } = req.params;
       const { deleteType } = req.body;
 
