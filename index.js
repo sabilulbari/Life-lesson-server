@@ -838,10 +838,6 @@ const run = async () => {
     app.put("/api/lessons/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
-
-        
-        console.log(id);
-
         const userId = req.headers["x-user-id"];
         const userPlan = req.headers["x-user-plan"];
 
