@@ -13,7 +13,7 @@ const client = new MongoClient(uri);
 app.use(cors());
 app.use(express.json());
 
-const JWKS = createRemoteJWKSet(new URL(`${process.env.FRONTEND_URL}/api/auth/jwks`));
+const JWKS = createRemoteJWKSet(new URL(`${process.env.FRONTEND_URL || "http://localhost:3000"}/api/auth/jwks`));
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req?.headers.authorization;
@@ -58,7 +58,7 @@ const run = async () => {
         const { category, emotionalTone, search, sort } = req.query;
 
         let query = {
-          visibility: "Public"
+          visibility: "Public",
         };
 
         if (category) {
@@ -100,7 +100,7 @@ const run = async () => {
     app.get("/api/public/featured/lesson", async (req, res) => {
       const filter = {
         featured: true,
-        visibility: "Public"
+        visibility: "Public",
       };
 
       const featureData = await allLessonCollections.find(filter).limit(6).toArray();
@@ -415,7 +415,7 @@ const run = async () => {
 
     //All post api
 
-    app.post("/api/reports",verifyToken, async (req, res) => {
+    app.post("/api/reports", verifyToken, async (req, res) => {
       try {
         const { lessonId, lessonTitle, reason } = req.body;
 
@@ -612,7 +612,7 @@ const run = async () => {
       }
     });
 
-    app.patch("/api/lessons/:id/favorite",verifyToken, async (req, res) => {
+    app.patch("/api/lessons/:id/favorite", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const userId = req.headers["x-user-id"];
@@ -839,6 +839,9 @@ const run = async () => {
       try {
         const { id } = req.params;
 
+        
+        console.log(id);
+
         const userId = req.headers["x-user-id"];
         const userPlan = req.headers["x-user-plan"];
 
@@ -893,7 +896,7 @@ const run = async () => {
     });
 
     //delete lesson
-    app.delete("/api/lessons/:id",verifyToken, async (req, res) => {
+    app.delete("/api/lessons/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
 
@@ -929,7 +932,7 @@ const run = async () => {
       }
     });
 
-    app.delete("/api/users/admin/:targetUserId",verifyToken, async (req, res) => {
+    app.delete("/api/users/admin/:targetUserId", verifyToken, async (req, res) => {
       const { targetUserId } = req.params;
       const adminId = req.headers["x-user-id"];
       const adminRole = req.headers["x-user-role"];
@@ -1002,7 +1005,7 @@ const run = async () => {
     });
 
     //delete report report amd related lesson
-    app.delete("/api/reports/:lessonId/ignore/delete",verifyToken, async (req, res) => {
+    app.delete("/api/reports/:lessonId/ignore/delete", verifyToken, async (req, res) => {
       const { lessonId } = req.params;
       const { deleteType } = req.body;
 
